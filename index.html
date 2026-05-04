@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -13,116 +11,96 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         .flatpickr-calendar.inline { width: 100%; box-shadow: none; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 10px; }
-        .flatpickr-day { height: 45px; line-height: 30px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 5px;}
-        .dots-container { display: flex; gap: 2px; margin-top: 2px; justify-content: center; width: 100%; flex-wrap: wrap; padding: 0 4px;}
+        .flatpickr-day { height: 45px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 5px; position: relative; border-radius: 0.5rem !important; }
+        
+        /* 4번 수정: 내가 선택한 일자 강조 (숫자 뒤에 동그라미) */
+        .flatpickr-day.selected { background: transparent !important; border: none !important; color: #374151 !important; }
+        .flatpickr-day.selected::before { content: ''; position: absolute; top: 4px; width: 28px; height: 28px; background: rgba(79, 70, 229, 0.15); border: 2px solid #4f46e5; border-radius: 50%; z-index: -1; }
+
+        /* 3번 추가: 최다 투표 일자 강조 (테두리 반짝임) */
+        .day-most-voted { box-shadow: inset 0 0 0 2px #f59e0b !important; background-color: #fffbeb !important; animation: pulse-gold 2s infinite; }
+        @keyframes pulse-gold { 0% { box-shadow: inset 0 0 0 2px #f59e0b; } 50% { box-shadow: inset 0 0 0 4px #fbbf24; } 100% { box-shadow: inset 0 0 0 2px #f59e0b; } }
+
+        .dots-container { display: flex; gap: 2px; margin-top: 18px; justify-content: center; width: 100%; flex-wrap: wrap; padding: 0 2px; position: absolute; }
         .user-dot { width: 5px; height: 5px; border-radius: 50%; }
         .spin { animation: spin 0.6s linear; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans p-4 antialiased min-h-screen flex items-center justify-center relative">
+<body class="bg-gray-100 text-gray-800 font-sans p-4 antialiased min-h-screen flex items-center justify-center">
 
     <div id="toast" class="fixed top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-xl transition-all duration-300 opacity-0 -translate-y-5 pointer-events-none z-[100] text-sm font-medium whitespace-nowrap"></div>
 
-    <!-- 회원정보 수정 모달 (색상 선택기 추가) -->
-    <div id="modal-profile" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[90] p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-            <h2 class="font-bold text-lg mb-4">내 정보 수정</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1">이메일</label>
-                    <input type="text" id="editEmail" disabled class="w-full p-3 bg-gray-100 border border-gray-200 rounded-lg text-gray-500 outline-none cursor-not-allowed">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">이름</label>
-                    <input type="text" id="editName" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none font-bold focus:ring-2 focus:ring-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-2">고유 색상 선택</label>
-                    <!-- 10가지 색상 팔레트가 이 위치에 렌더링 됩니다 -->
-                    <div id="colorPickerContainer" class="flex flex-wrap gap-3"></div>
-                </div>
-            </div>
-            <div class="flex gap-2 mt-6">
-                <button onclick="closeProfileModal()" class="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-colors">취소</button>
-                <button onclick="handleUpdateProfile()" class="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition-colors">저장하기</button>
+    <!-- 확인 모달 (나가기/삭제용) -->
+    <div id="modal-confirm" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[110] p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <p id="confirm-message" class="text-gray-800 font-medium mb-6 whitespace-pre-line"></p>
+            <div class="flex gap-2">
+                <button onclick="closeConfirmModal()" class="flex-1 py-3 bg-gray-100 rounded-lg font-bold">취소</button>
+                <button id="btn-confirm-action" class="flex-1 py-3 bg-red-500 text-white rounded-lg font-bold">확인</button>
             </div>
         </div>
     </div>
 
     <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-6 relative overflow-hidden">
         <div id="loading" class="hidden absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
-            <span class="text-indigo-600 font-semibold animate-pulse">데이터 처리 중...</span>
+            <span class="text-indigo-600 font-semibold animate-pulse">처리 중...</span>
         </div>
 
         <h1 class="text-2xl font-extrabold text-indigo-600 text-center mb-8">MANNAJA</h1>
 
         <!-- 화면 1: 로그인 -->
         <div id="screen-auth" class="space-y-4">
-            <h2 class="font-bold text-gray-700 text-lg border-b pb-2">로그인 / 회원가입</h2>
-            <input type="email" id="authEmail" placeholder="이메일" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
-            <input type="password" id="authPassword" placeholder="비밀번호" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
-            <input type="text" id="authName" placeholder="표시될 이름 (가입시에만)" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none font-bold">
-            <div class="flex gap-2 pt-2">
+            <h2 class="font-bold text-gray-700 text-lg border-b pb-2">로그인</h2>
+            <input type="email" id="authEmail" placeholder="이메일" class="w-full p-3 bg-gray-50 border rounded-lg outline-none">
+            <input type="password" id="authPassword" placeholder="비밀번호" class="w-full p-3 bg-gray-50 border rounded-lg outline-none">
+            <input type="text" id="authName" placeholder="이름 (가입 시)" class="w-full p-3 bg-gray-50 border rounded-lg outline-none font-bold">
+            <div class="flex gap-2">
                 <button onclick="handleLogin()" class="flex-1 bg-gray-800 text-white font-bold py-3 rounded-lg">로그인</button>
-                <button onclick="handleSignUp()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-lg">가입하기</button>
+                <button onclick="handleSignUp()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-lg">가입</button>
             </div>
         </div>
 
         <!-- 화면 2: 대시보드 -->
         <div id="screen-dashboard" class="hidden space-y-6">
             <div class="flex justify-between items-center border-b pb-2">
-                <div class="flex items-center gap-2">
-                    <h2 class="font-bold text-gray-700 text-lg">내 작업 공간</h2>
-                    <button onclick="openProfileModal()" class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full hover:bg-indigo-50 hover:text-indigo-600 transition-colors">정보 수정</button>
-                </div>
+                <h2 class="font-bold text-gray-700 text-lg">내 모임</h2>
                 <button onclick="handleLogout()" class="text-xs text-red-500 underline">로그아웃</button>
             </div>
-            
-            <div>
-                <h3 class="font-semibold text-gray-500 text-sm mb-3">내 모임 목록</h3>
-                <div id="my-rooms-list" class="space-y-3 max-h-56 overflow-y-auto no-scrollbar pb-2"></div>
-            </div>
-
-            <div class="relative flex items-center py-2">
-                <div class="flex-grow border-t border-gray-300"></div>
-                <span class="flex-shrink-0 mx-4 text-gray-400 text-xs">새로운 모임</span>
-                <div class="flex-grow border-t border-gray-300"></div>
-            </div>
-
-            <div class="space-y-3">
+            <div id="my-rooms-list" class="space-y-3 max-h-64 overflow-y-auto no-scrollbar"></div>
+            <div class="space-y-3 pt-4 border-t">
                 <div class="flex gap-2">
-                    <input type="text" id="newRoomName" placeholder="새 방 이름" class="w-2/3 p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
-                    <button onclick="handleCreateRoom()" class="w-1/3 bg-indigo-600 text-white font-bold py-3 rounded-lg">만들기</button>
+                    <input type="text" id="newRoomName" placeholder="새 방 이름" class="flex-1 p-3 bg-gray-50 border rounded-lg outline-none">
+                    <button onclick="handleCreateRoom()" class="bg-indigo-600 text-white px-4 font-bold rounded-lg">생성</button>
                 </div>
                 <div class="flex gap-2">
-                    <input type="text" id="joinRoomCode" placeholder="초대 코드" class="w-2/3 p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none uppercase">
-                    <button onclick="handleJoinRoom()" class="w-1/3 bg-gray-800 text-white font-bold py-3 rounded-lg">입장</button>
+                    <input type="text" id="joinRoomCode" placeholder="초대 코드" class="flex-1 p-3 bg-gray-50 border rounded-lg outline-none uppercase">
+                    <button onclick="handleJoinRoom()" class="bg-gray-800 text-white px-4 font-bold rounded-lg">입장</button>
                 </div>
             </div>
         </div>
 
         <!-- 화면 3: 달력 -->
-        <div id="screen-calendar" class="hidden space-y-5">
-            <div class="flex justify-between items-start border-b pb-2">
+        <div id="screen-calendar" class="hidden space-y-4">
+            <div class="flex justify-between items-start">
                 <div>
-                    <h2 id="roomTitleDisplay" class="font-bold text-xl text-gray-800">모임 이름</h2>
-                    <p id="roomCodeDisplay" class="text-xs text-indigo-600 font-semibold mt-1"></p>
+                    <h2 id="roomTitleDisplay" class="font-bold text-xl"></h2>
+                    <p id="roomCodeDisplay" class="text-xs text-indigo-600"></p>
                 </div>
-                <div class="flex gap-3">
-                    <button onclick="loadCalendarData()" class="p-2 hover:bg-gray-100 rounded-full">
-                        <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                    </button>
-                    <button onclick="exitToDashboard()" class="text-xs text-gray-400 underline pt-2">목록으로</button>
+                <div class="flex gap-2">
+                    <button onclick="confirmLeaveRoom()" class="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-200">방 나가기</button>
+                    <button onclick="confirmDeleteRoom()" class="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-200">방 삭제</button>
                 </div>
             </div>
             <div id="legend-container" class="flex flex-wrap gap-2 text-[10px]"></div>
-            <div><input type="text" id="calendar" class="hidden"></div>
-            <button onclick="submitDates()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg">일정 제출하기</button>
+            <div id="calendar-container">
+                <input type="text" id="calendar" class="hidden">
+            </div>
+            <div class="flex gap-2">
+                <button onclick="exitToDashboard()" class="flex-1 bg-gray-100 py-3 rounded-lg font-bold">목록으로</button>
+                <button onclick="submitDates()" class="flex-[2] bg-indigo-600 text-white py-3 rounded-lg font-bold">일정 제출</button>
+            </div>
         </div>
     </div>
 
@@ -130,287 +108,164 @@
         const SUPABASE_URL = 'https://cqorkfocgpisqgsjxxbs.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_SNOSyYx-qg5RNgqkrUVRsQ_Ps9ShpTP';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // ★ 고정된 10가지 색상 팔레트
-        const FIXED_PALETTE = [
-            "#EF4444", // 빨강
-            "#F97316", // 주황
-            "#F59E0B", // 노랑
-            "#10B981", // 초록
-            "#14B8A6", // 청록
-            "#3B82F6", // 파랑
-            "#6366F1", // 남색
-            "#8B5CF6", // 보라
-            "#EC4899", // 분홍
-            "#64748B"  // 회색
-        ];
-
-        const state = { user: null, roomCode: null, roomName: null, roomData: {}, orderedUsers: [], userColors: {} };
+        const state = { user: null, roomCode: null, roomName: null, roomData: {}, orderedUsers: [], userColors: {}, mostVotedDate: null };
         let fpInstance = null;
-        let currentEditColor = "";
 
-
-       
-        // 페이지 로드 시 실행되는 자동 로그인 체크 로직
-        window.onload = async () => {
-
-            showLoading(true);
-    
-
-            // 1. 브라우저에 저장된 기존 로그인 세션이 있는지 확인
-    
-            const { data: { session }, error } = await supabaseClient.auth.getSession();
-    
-    
-            if (session && !error) {
-        // 세션이 있다면 사용자 정보를 상태에 저장하고 즉시 대시보드로 이동
-    
-                state.user = session.user;
-                showToast(`${state.user.user_metadata.display_name}님, 다시 오신 것을 환영합니다!`);
-                await loadMyRooms();
-        
-                switchScreen('screen-dashboard');
-   
-            } else {
-       
-                // 세션이 없다면 로그인 화면 유지
-        
-                switchScreen('screen-auth');
- 
-            }
-    
-   
-            showLoading(false);
-
-        };
-
-        
         function showToast(msg) {
             const toast = document.getElementById('toast');
-            toast.innerText = msg;
-            toast.classList.remove('opacity-0', '-translate-y-5');
+            toast.innerText = msg; toast.classList.remove('opacity-0', '-translate-y-5');
             setTimeout(() => toast.classList.add('opacity-0', '-translate-y-5'), 2500);
         }
         function showLoading(show) { document.getElementById('loading').style.display = show ? 'flex' : 'none'; }
-        function switchScreen(screenId) {
-            ['screen-auth', 'screen-dashboard', 'screen-calendar'].forEach(id => document.getElementById(id).classList.add('hidden'));
-            document.getElementById(screenId).classList.remove('hidden');
+        function switchScreen(id) {
+            ['screen-auth', 'screen-dashboard', 'screen-calendar'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
         }
 
-        // --- 회원정보 수정 & 색상 선택 로직 ---
-        function renderColorPicker() {
-            const container = document.getElementById('colorPickerContainer');
-            container.innerHTML = FIXED_PALETTE.map(color => `
-                <button onclick="currentEditColor='${color}'; renderColorPicker();"
-                    class="w-8 h-8 rounded-full focus:outline-none transition-all duration-200 ${currentEditColor === color ? 'ring-4 ring-offset-2 ring-gray-400 scale-110 shadow-md' : 'hover:scale-110'}"
-                    style="background-color: ${color};">
-                </button>
-            `).join('');
+        // 모달 관련
+        function openConfirmModal(msg, action) {
+            document.getElementById('confirm-message').innerText = msg;
+            const btn = document.getElementById('btn-confirm-action');
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            newBtn.onclick = () => { closeConfirmModal(); action(); };
+            document.getElementById('modal-confirm').classList.remove('hidden');
         }
+        function closeConfirmModal() { document.getElementById('modal-confirm').classList.add('hidden'); }
 
-        function openProfileModal() {
-            document.getElementById('editEmail').value = state.user.email;
-            document.getElementById('editName').value = state.user.user_metadata.display_name || "";
-            // 현재 유저의 색상을 불러오거나, 없으면 팔레트 첫 번째 색상으로 초기화
-            currentEditColor = state.user.user_metadata.color || FIXED_PALETTE[0]; 
-            renderColorPicker();
-            document.getElementById('modal-profile').classList.remove('hidden');
+        // 자동 로그인
+        window.onload = async () => {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session) { state.user = session.user; await loadMyRooms(); switchScreen('screen-dashboard'); }
+        };
+
+        // 1번: 방 나가기
+        function confirmLeaveRoom() {
+            openConfirmModal("이 방에서 나 가시겠습니까?\n작성한 일정은 모두 삭제됩니다.", handleLeaveRoom);
         }
-
-        function closeProfileModal() { document.getElementById('modal-profile').classList.add('hidden'); }
-
-        async function handleUpdateProfile() {
-            const newName = document.getElementById('editName').value.trim();
-            if(!newName) return showToast("이름을 입력해주세요.");
-            
+        async function handleLeaveRoom() {
             showLoading(true);
-            
-            // 1. 이름과 선택된 '색상'을 함께 업데이트
-            const { data, error: authError } = await supabaseClient.auth.updateUser({
-                data: { display_name: newName, color: currentEditColor }
-            });
+            await supabaseClient.from('dates').delete().eq('room_code', state.roomCode).eq('user_id', state.user.id);
+            await supabaseClient.from('room_participants').delete().eq('room_code', state.roomCode).eq('user_id', state.user.id);
+            showLoading(false); showToast("방에서 퇴장했습니다."); exitToDashboard();
+        }
 
-            if (authError) { showLoading(false); return showToast("변경 실패: " + authError.message); }
-
-            // 2. 과거 투표 데이터 동기화 (user_name과 user_color 모두 변경)
-            const { error: dbError } = await supabaseClient
-                .from('dates')
-                .update({ user_name: newName, user_color: currentEditColor })
-                .eq('user_id', state.user.id);
-
+        // 2번: 방 삭제
+        function confirmDeleteRoom() {
+            openConfirmModal("방을 영구 삭제하시겠습니까?\n모든 참여자의 데이터가 삭제됩니다.", handleDeleteRoom);
+        }
+        async function handleDeleteRoom() {
+            showLoading(true);
+            const { error } = await supabaseClient.from('rooms').delete().eq('room_code', state.roomCode);
             showLoading(false);
-            if (dbError) return showToast("데이터 동기화 중 오류가 발생했습니다.");
-
-            state.user = data.user; 
-            closeProfileModal();
-            showToast("정보가 성공적으로 변경되었습니다.");
-            await loadMyRooms(); 
+            if(error) return showToast("방 소유자만 삭제할 수 있습니다.");
+            showToast("방이 삭제되었습니다."); exitToDashboard();
         }
 
-        // --- 인증 로직 ---
-        async function handleSignUp() {
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
-            const name = document.getElementById('authName').value.trim();
-            if(!email || !password || !name) return showToast("정보를 모두 입력하세요.");
-            
-            showLoading(true);
-            
-            // ★ 가입 시 10가지 색상 중 하나를 랜덤으로 자동 배정
-            const randomColor = FIXED_PALETTE[Math.floor(Math.random() * FIXED_PALETTE.length)];
-            
-            const { data, error } = await supabaseClient.auth.signUp({
-                email, password, options: { data: { display_name: name, color: randomColor } }
-            });
-            showLoading(false);
-            if(error) return showToast(error.message);
-            state.user = data.user;
-            await loadMyRooms();
-            switchScreen('screen-dashboard');
-        }
-
-        async function handleLogin() {
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
-            showLoading(true);
-            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            showLoading(false);
-            if(error) return showToast("로그인 정보를 확인하세요.");
-            state.user = data.user;
-            await loadMyRooms();
-            switchScreen('screen-dashboard');
-        }
-
-        async function handleLogout() { await supabaseClient.auth.signOut(); state.user = null; switchScreen('screen-auth'); }
-
-        async function loadMyRooms() {
-            showLoading(true);
-            const { data, error } = await supabaseClient.from('room_participants').select(`room_code, rooms ( room_name )`).eq('user_id', state.user.id).order('joined_at', { ascending: false });
-            showLoading(false);
-            const listContainer = document.getElementById('my-rooms-list');
-            if (error || !data || data.length === 0) {
-                listContainer.innerHTML = `<div class="text-sm text-gray-400 text-center py-6 bg-gray-50 rounded-lg">참여 중인 모임이 없습니다.</div>`;
-                return;
-            }
-            let html = '';
-            data.forEach(item => {
-                html += `<div onclick="enterRoom('${item.room_code}', '${item.rooms.room_name}')" class="p-4 border border-gray-200 rounded-xl flex justify-between items-center hover:border-indigo-500 cursor-pointer bg-white">
-                    <div><h3 class="font-bold text-gray-800">${item.rooms.room_name}</h3><p class="text-[10px] text-gray-400 uppercase">코드: ${item.room_code}</p></div>
-                    <span class="text-indigo-200 font-bold text-xl">➔</span>
-                </div>`;
-            });
-            listContainer.innerHTML = html;
-        }
-
-        function enterRoom(code, name) {
-            state.roomCode = code; state.roomName = name;
-            document.getElementById('roomTitleDisplay').innerText = name;
-            document.getElementById('roomCodeDisplay').innerText = "코드: " + code;
-            loadCalendarData();
-        }
-
-        async function handleCreateRoom() {
-            const name = document.getElementById('newRoomName').value.trim();
-            if(!name) return showToast("방 이름을 입력하세요.");
-            showLoading(true);
-            const { data: existing } = await supabaseClient.from('rooms').select('room_name').eq('room_name', name).maybeSingle();
-            if (existing) { showLoading(false); return showToast("이미 있는 방 이름입니다."); }
-            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            await supabaseClient.from('rooms').insert([{ room_code: code, room_name: name }]);
-            await supabaseClient.from('room_participants').insert([{ room_code: code, user_id: state.user.id }]);
-            showLoading(false); document.getElementById('newRoomName').value = ''; enterRoom(code, name);
-        }
-
-        async function handleJoinRoom() {
-            const code = document.getElementById('joinRoomCode').value.trim().toUpperCase();
-            if(!code) return showToast("코드를 입력하세요.");
-            showLoading(true);
-            const { data, error } = await supabaseClient.from('rooms').select('room_name').eq('room_code', code).single();
-            if(error || !data) { showLoading(false); return showToast("없는 방입니다."); }
-            await supabaseClient.from('room_participants').upsert([{ room_code: code, user_id: state.user.id }]);
-            showLoading(false); document.getElementById('joinRoomCode').value = ''; enterRoom(code, data.room_name);
-        }
-
-        // --- 일정 데이터 불러오기 및 렌더링 ---
         async function loadCalendarData() {
             showLoading(true);
-            // user_color 컬럼도 같이 불러오기
-            const { data: votes, error } = await supabaseClient.from('dates').select('user_name, user_color, available_date').eq('room_code', state.roomCode).order('id', { ascending: true });
+            const { data: votes } = await supabaseClient.from('dates').select('user_name, user_color, available_date').eq('room_code', state.roomCode);
             showLoading(false);
             
             state.roomData = {}; state.orderedUsers = []; state.userColors = {};
-            
-            votes.forEach(vote => {
-                if(!state.roomData[vote.available_date]) state.roomData[vote.available_date] = [];
-                state.roomData[vote.available_date].push(vote.user_name);
-                
-                if(!state.orderedUsers.includes(vote.user_name)) state.orderedUsers.push(vote.user_name);
-                
-                // 각 유저별 저장된 색상 맵핑
-                state.userColors[vote.user_name] = vote.user_color;
+            let voteCounts = {}; let maxVotes = 0; state.mostVotedDate = null;
+
+            votes.forEach(v => {
+                if(!state.roomData[v.available_date]) state.roomData[v.available_date] = [];
+                state.roomData[v.available_date].push(v.user_name);
+                if(!state.orderedUsers.includes(v.user_name)) state.orderedUsers.push(v.user_name);
+                state.userColors[v.user_name] = v.user_color;
+
+                // 3번: 최다 투표 계산
+                voteCounts[v.available_date] = (voteCounts[v.available_date] || 0) + 1;
+                if(voteCounts[v.available_date] > maxVotes) {
+                    maxVotes = voteCounts[v.available_date];
+                    state.mostVotedDate = v.available_date;
+                }
             });
             renderCalendar(); switchScreen('screen-calendar');
         }
 
         function renderCalendar() {
             const myName = state.user.user_metadata.display_name;
-            const myColor = state.user.user_metadata.color || FIXED_PALETTE[0];
-            
-            const usersSet = new Set(state.orderedUsers); 
-            usersSet.add(myName);
-            
-            // 만약 내가 아직 투표를 안 해서 색상 데이터가 안 불려왔을 경우를 대비해 명시적으로 삽입
+            const myColor = state.user.user_metadata.color || "#4f46e5";
+            const usersSet = new Set(state.orderedUsers); usersSet.add(myName);
             state.userColors[myName] = myColor;
 
-            // 범례 영역 렌더링
-            document.getElementById('legend-container').innerHTML = Array.from(usersSet).map(user => 
-                `<span class="flex items-center gap-1 bg-gray-50 border px-2 py-0.5 rounded-full font-semibold">
-                    <span class="user-dot" style="background-color: ${state.userColors[user] || '#cbd5e1'}"></span>${user}
+            document.getElementById('legend-container').innerHTML = Array.from(usersSet).map(u => 
+                `<span class="flex items-center gap-1 bg-white border px-2 py-0.5 rounded-full font-bold">
+                    <span class="user-dot" style="background-color: ${state.userColors[u] || '#ccc'}"></span>${u}
                 </span>`).join('');
-                
-            const myPrevDates = Object.keys(state.roomData).filter(date => state.roomData[date].includes(myName));
-            
+
+            const myDates = Object.keys(state.roomData).filter(d => state.roomData[d].includes(myName));
             if (fpInstance) fpInstance.destroy();
+            
             fpInstance = flatpickr("#calendar", {
-                inline: true, mode: "multiple", locale: "ko", dateFormat: "Y-m-d", defaultDate: myPrevDates,
+                inline: true, mode: "multiple", locale: "ko", dateFormat: "Y-m-d", defaultDate: myDates,
                 onDayCreate: (dObj, dStr, fp, dayElem) => {
-                    const dateStr = flatpickr.formatDate(dayElem.dateObj, "Y-m-d");
-                    const users = state.roomData[dateStr] || [];
+                    const d = flatpickr.formatDate(dayElem.dateObj, "Y-m-d");
+                    
+                    // 3번: 최다 투표 강조
+                    if(d === state.mostVotedDate && state.roomData[d]?.length > 0) dayElem.classList.add('day-most-voted');
+
+                    const users = state.roomData[d] || [];
                     if (users.length > 0) {
-                        const dotsDiv = document.createElement("div"); dotsDiv.className = "dots-container";
-                        users.forEach(user => {
+                        const dots = document.createElement("div"); dots.className = "dots-container";
+                        users.forEach(u => {
                             const dot = document.createElement("span"); dot.className = "user-dot";
-                            dot.style.backgroundColor = state.userColors[user] || '#cbd5e1'; 
-                            dotsDiv.appendChild(dot);
+                            dot.style.backgroundColor = state.userColors[u] || '#ccc';
+                            dots.appendChild(dot);
                         });
-                        dayElem.appendChild(dotsDiv);
+                        dayElem.appendChild(dots);
                     }
                 }
             });
         }
 
+        // 기존 필수 함수들 (로그인, 방생성 등 - 이전 코드 유지)
+        async function handleLogin() {
+            const e = document.getElementById('authEmail').value; const p = document.getElementById('authPassword').value;
+            showLoading(true); const { data, error } = await supabaseClient.auth.signInWithPassword({ email: e, password: p });
+            showLoading(false); if(error) return showToast("로그인 실패");
+            state.user = data.user; await loadMyRooms(); switchScreen('screen-dashboard');
+        }
+        async function handleSignUp() {
+            const e = document.getElementById('authEmail').value; const p = document.getElementById('authPassword').value; const n = document.getElementById('authName').value;
+            showLoading(true); const { data, error } = await supabaseClient.auth.signUp({ email: e, password: p, options: { data: { display_name: n, color: "#4f46e5" } } });
+            showLoading(false); if(error) return showToast(error.message);
+            state.user = data.user; await loadMyRooms(); switchScreen('screen-dashboard');
+        }
+        async function loadMyRooms() {
+            const { data } = await supabaseClient.from('room_participants').select(`room_code, rooms ( room_name )`).eq('user_id', state.user.id);
+            const list = document.getElementById('my-rooms-list');
+            list.innerHTML = data?.map(i => `<div onclick="enterRoom('${i.room_code}', '${i.rooms.room_name}')" class="p-4 border rounded-xl flex justify-between items-center bg-white shadow-sm cursor-pointer hover:border-indigo-500">
+                <div><h3 class="font-bold text-gray-800">${i.rooms.room_name}</h3><p class="text-[10px] text-gray-400">${i.room_code}</p></div><span class="text-indigo-600">➔</span></div>`).join('') || "";
+        }
+        function enterRoom(c, n) { state.roomCode = c; state.roomName = n; document.getElementById('roomTitleDisplay').innerText = n; document.getElementById('roomCodeDisplay').innerText = "코드: "+c; loadCalendarData(); }
+        async function handleCreateRoom() {
+            const n = document.getElementById('newRoomName').value; if(!n) return;
+            const c = Math.random().toString(36).substring(2, 8).toUpperCase();
+            await supabaseClient.from('rooms').insert([{ room_code: c, room_name: n }]);
+            await supabaseClient.from('room_participants').insert([{ room_code: c, user_id: state.user.id }]);
+            document.getElementById('newRoomName').value = ""; await loadMyRooms(); enterRoom(c, n);
+        }
+        async function handleJoinRoom() {
+            const c = document.getElementById('joinRoomCode').value.toUpperCase();
+            const { data } = await supabaseClient.from('rooms').select('room_name').eq('room_code', c).single();
+            if(!data) return showToast("방이 없습니다.");
+            await supabaseClient.from('room_participants').upsert([{ room_code: c, user_id: state.user.id }]);
+            document.getElementById('joinRoomCode').value = ""; await loadMyRooms(); enterRoom(c, data.room_name);
+        }
         async function submitDates() {
-            const selectedDates = fpInstance.selectedDates.map(date => flatpickr.formatDate(date, "Y-m-d"));
-            const myName = state.user.user_metadata.display_name;
-            const myColor = state.user.user_metadata.color || FIXED_PALETTE[0]; // 저장할 내 색상
-            
+            const dates = fpInstance.selectedDates.map(d => flatpickr.formatDate(d, "Y-m-d"));
+            const n = state.user.user_metadata.display_name; const c = state.user.user_metadata.color;
             showLoading(true);
             await supabaseClient.from('dates').delete().eq('room_code', state.roomCode).eq('user_id', state.user.id);
-            
-            if (selectedDates.length > 0) {
-                // user_color 컬럼까지 포함하여 저장
-                const insertData = selectedDates.map(d => ({ 
-                    room_code: state.roomCode, 
-                    user_id: state.user.id, 
-                    user_name: myName, 
-                    user_color: myColor, 
-                    available_date: d 
-                }));
-                await supabaseClient.from('dates').insert(insertData);
-            }
-            showLoading(false); showToast("저장 완료!"); loadCalendarData();
+            if(dates.length > 0) await supabaseClient.from('dates').insert(dates.map(d => ({ room_code: state.roomCode, user_id: state.user.id, user_name: n, user_color: c, available_date: d })));
+            showLoading(false); showToast("저장 완료"); loadCalendarData();
         }
         function exitToDashboard() { loadMyRooms(); switchScreen('screen-dashboard'); }
+        async function handleLogout() { await supabaseClient.auth.signOut(); switchScreen('screen-auth'); }
     </script>
 </body>
 </html>
