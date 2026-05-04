@@ -9,7 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/ko.js"></script>
     
-    <!-- Supabase JS 라이브러리 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <style>
@@ -19,6 +18,10 @@
         .user-dot { width: 5px; height: 5px; border-radius: 50%; }
         .spin { animation: spin 0.6s linear; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* 스크롤바 숨기기 (모바일 깔끔하게) */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans p-4 antialiased min-h-screen flex items-center justify-center relative">
@@ -32,7 +35,6 @@
 
         <h1 class="text-2xl font-extrabold text-indigo-600 text-center mb-8">SyncTime</h1>
 
-        <!-- 화면 1: 로그인 및 회원가입 (비밀번호 암호화) -->
         <div id="screen-auth" class="space-y-4">
             <h2 class="font-bold text-gray-700 text-lg border-b pb-2">로그인 / 회원가입</h2>
             <input type="email" id="authEmail" placeholder="이메일" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
@@ -44,31 +46,36 @@
             </div>
         </div>
 
-        <!-- 화면 2: 대시보드 (방 생성/입장) -->
-        <div id="screen-dashboard" class="hidden space-y-8">
+        <div id="screen-dashboard" class="hidden space-y-6">
             <div class="flex justify-between items-center border-b pb-2">
                 <h2 class="font-bold text-gray-700 text-lg">내 작업 공간</h2>
                 <button onclick="handleLogout()" class="text-xs text-red-500 underline">로그아웃</button>
             </div>
             
-            <div class="space-y-3">
-                <input type="text" id="newRoomName" placeholder="새 모임 이름 (예: 강릉 여행)" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
-                <button onclick="handleCreateRoom()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg shadow-md">방 생성하기</button>
+            <div>
+                <h3 class="font-semibold text-gray-500 text-sm mb-3">내 모임 목록</h3>
+                <div id="my-rooms-list" class="space-y-3 max-h-56 overflow-y-auto no-scrollbar pb-2">
+                    </div>
             </div>
-            
+
             <div class="relative flex items-center py-2">
                 <div class="flex-grow border-t border-gray-300"></div>
-                <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">또는</span>
+                <span class="flex-shrink-0 mx-4 text-gray-400 text-xs">새로운 모임</span>
                 <div class="flex-grow border-t border-gray-300"></div>
             </div>
 
             <div class="space-y-3">
-                <input type="text" id="joinRoomCode" placeholder="초대 코드 입력" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none uppercase">
-                <button onclick="handleJoinRoom()" class="w-full bg-gray-800 text-white font-bold py-3 rounded-lg shadow-md">방 입장하기</button>
+                <div class="flex gap-2">
+                    <input type="text" id="newRoomName" placeholder="새 방 이름" class="w-2/3 p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
+                    <button onclick="handleCreateRoom()" class="w-1/3 bg-indigo-600 text-white font-bold py-3 rounded-lg shadow-md">방 만들기</button>
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="joinRoomCode" placeholder="초대 코드" class="w-2/3 p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none uppercase">
+                    <button onclick="handleJoinRoom()" class="w-1/3 bg-gray-800 text-white font-bold py-3 rounded-lg shadow-md">코드로 입장</button>
+                </div>
             </div>
         </div>
 
-        <!-- 화면 3: 달력 투표 화면 -->
         <div id="screen-calendar" class="hidden space-y-5">
             <div class="flex justify-between items-start border-b pb-2">
                 <div>
@@ -81,7 +88,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button onclick="switchScreen('screen-dashboard')" class="text-xs text-gray-400 underline pt-2">나가기</button>
+                    <button onclick="exitToDashboard()" class="text-xs text-gray-400 underline pt-2">목록으로</button>
                 </div>
             </div>
 
@@ -92,7 +99,7 @@
     </div>
 
     <script>
-        // ★ 여기에 본인의 프로젝트 정보를 입력하세요 ★
+        // ★ Supabase 정보 재입력 ★
         const SUPABASE_URL = 'https://cqorkfocgpisqgsjxxbs.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_SNOSyYx-qg5RNgqkrUVRsQ_Ps9ShpTP';
         
@@ -101,7 +108,6 @@
         const state = { user: null, roomCode: null, roomName: null, roomData: {}, orderedUsers: [] };
         let fpInstance = null;
 
-        // --- 공통 UI ---
         let toastTimeout;
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -116,7 +122,12 @@
             document.getElementById(screenId).classList.remove('hidden');
         }
 
-        // --- 인증 (로그인/회원가입) ---
+        async function exitToDashboard() {
+            await loadMyRooms();
+            switchScreen('screen-dashboard');
+        }
+
+        // --- 인증 ---
         async function handleSignUp() {
             const email = document.getElementById('authEmail').value.trim();
             const password = document.getElementById('authPassword').value;
@@ -126,13 +137,14 @@
             showLoading(true);
             const { data, error } = await supabaseClient.auth.signUp({
                 email: email, password: password,
-                options: { data: { display_name: name } } // 회원가입 시 이름 정보를 메타데이터로 저장
+                options: { data: { display_name: name } } 
             });
             showLoading(false);
 
             if(error) return showToast(error.message);
             state.user = data.user;
-            showToast("회원가입 및 로그인 성공!");
+            showToast("가입 완료!");
+            await loadMyRooms(); // 리스트 불러오기
             switchScreen('screen-dashboard');
         }
 
@@ -148,6 +160,7 @@
             if(error) return showToast("로그인 실패: 정보를 확인해주세요.");
             state.user = data.user;
             showToast("로그인 성공!");
+            await loadMyRooms(); // 리스트 불러오기
             switchScreen('screen-dashboard');
         }
 
@@ -157,46 +170,45 @@
             switchScreen('screen-auth');
         }
 
-        // --- 대시보드 (방 생성/입장) ---
-        async function handleCreateRoom() {
-            const name = document.getElementById('newRoomName').value.trim();
-            if(!name) return showToast("방 이름을 입력해주세요.");
-            
+        // --- 내 방 목록 불러오기 (핵심 로직) ---
+        async function loadMyRooms() {
             showLoading(true);
-
-            // 1. 방 이름 중복 검사 (Supabase에서 같은 이름이 있는지 조회)
-            // maybeSingle()은 데이터가 없으면 null을 반환하여 에러를 내지 않습니다.
-            const { data: existingRoom, error: searchError } = await supabaseClient
-                .from('rooms')
-                .select('room_name')
-                .eq('room_name', name)
-                .maybeSingle();
-
-            if (searchError) {
-                showLoading(false);
-                return showToast("중복 검사 중 오류가 발생했습니다.");
-            }
-
-            // 2. 만약 같은 이름의 방이 발견되었다면 생성을 막고 알람 띄우기
-            if (existingRoom) {
-                showLoading(false);
-                return showToast("이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.");
-            }
-
-            // 3. 중복이 없다면 정상적으로 방 생성 진행
-            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const { error: insertError } = await supabaseClient
-                .from('rooms')
-                .insert([{ room_code: code, room_name: name }]);
             
-            showLoading(false);
+            // room_participants 테이블에서 내가 가입된 방의 코드와 방 이름을 조인해서 가져옵니다.
+            const { data, error } = await supabaseClient
+                .from('room_participants')
+                .select(`room_code, rooms ( room_name )`)
+                .eq('user_id', state.user.id)
+                .order('joined_at', { ascending: false });
 
-            if(insertError) {
-                if(insertError.code === '23505') return showToast("생성 오류: 코드가 중복되었습니다. 다시 시도해주세요.");
-                return showToast("방 생성 중 오류가 발생했습니다.");
+            showLoading(false);
+            const listContainer = document.getElementById('my-rooms-list');
+
+            if (error || !data || data.length === 0) {
+                listContainer.innerHTML = `<div class="text-sm text-gray-400 text-center py-6 bg-gray-50 rounded-lg">아직 참여한 모임이 없습니다. <br>아래에서 방을 만들거나 코드로 입장해보세요!</div>`;
+                return;
             }
 
-            // 4. 생성 완료 후 화면 전환
+            let html = '';
+            data.forEach(item => {
+                const rName = item.rooms.room_name;
+                const rCode = item.room_code;
+                
+                // 클릭 시 해당 방으로 즉시 입장하도록 enterRoom 함수 연결
+                html += `
+                <div onclick="enterRoom('${rCode}', '${rName}')" class="p-4 border border-gray-200 rounded-xl flex justify-between items-center hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all bg-white group">
+                    <div>
+                        <h3 class="font-bold text-gray-800">${rName}</h3>
+                        <p class="text-[10px] text-gray-400 mt-1 uppercase">코드: ${rCode}</p>
+                    </div>
+                    <span class="text-indigo-200 group-hover:text-indigo-600 transition-colors font-bold text-xl">➔</span>
+                </div>`;
+            });
+            listContainer.innerHTML = html;
+        }
+
+        // 리스트 클릭 시 방 입장 처리 함수
+        function enterRoom(code, name) {
             state.roomCode = code;
             state.roomName = name;
             document.getElementById('roomTitleDisplay').innerText = name;
@@ -204,36 +216,76 @@
             loadCalendarData();
         }
 
+        // --- 방 생성 및 입장 ---
+        async function handleCreateRoom() {
+            const name = document.getElementById('newRoomName').value.trim();
+            if(!name) return showToast("방 이름을 입력해주세요.");
+            
+            showLoading(true);
+
+            // 중복 검사
+            const { data: existingRoom, error: searchError } = await supabaseClient
+                .from('rooms')
+                .select('room_name')
+                .eq('room_name', name)
+                .maybeSingle();
+
+            if (existingRoom) {
+                showLoading(false);
+                return showToast("이미 존재하는 방 이름입니다.");
+            }
+
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            
+            // 방 생성
+            const { error: insertError } = await supabaseClient.from('rooms').insert([{ room_code: code, room_name: name }]);
+            
+            if(insertError) {
+                showLoading(false);
+                return showToast("방 생성 중 오류가 발생했습니다.");
+            }
+
+            // ★ 방을 만든 사람을 해당 방의 참여자 명단에 자동 추가 ★
+            await supabaseClient.from('room_participants').insert([{ room_code: code, user_id: state.user.id }]);
+            
+            showLoading(false);
+            document.getElementById('newRoomName').value = ''; // 인풋창 초기화
+            enterRoom(code, name);
+        }
+
         async function handleJoinRoom() {
             const code = document.getElementById('joinRoomCode').value.trim().toUpperCase();
             if(!code) return showToast("초대 코드를 입력해주세요.");
 
             showLoading(true);
-            const { data, error } = await supabaseClient.from('rooms').select('room_name').eq('room_code', code).single();
-            showLoading(false);
-
-            if(error || !data) return showToast("존재하지 않는 방입니다.");
             
-            state.roomCode = code;
-            state.roomName = data.room_name;
-            document.getElementById('roomTitleDisplay').innerText = data.room_name;
-            document.getElementById('roomCodeDisplay').innerText = "초대 코드: " + code;
-            loadCalendarData();
+            // 방 존재 여부 확인
+            const { data, error } = await supabaseClient.from('rooms').select('room_name').eq('room_code', code).single();
+            if(error || !data) {
+                showLoading(false);
+                return showToast("존재하지 않는 방입니다.");
+            }
+
+            // ★ 입력한 방 코드로 나를 참여자 명단에 추가 (이미 가입된 상태여도 에러 없이 처리됨) ★
+            await supabaseClient.from('room_participants').upsert([{ room_code: code, user_id: state.user.id }]);
+            
+            showLoading(false);
+            document.getElementById('joinRoomCode').value = ''; // 인풋창 초기화
+            enterRoom(code, data.room_name);
         }
 
-        // --- 일정 데이터 불러오기 및 달력 렌더링 ---
+        // --- 일정 데이터 (이하 기존과 동일) ---
         async function loadCalendarData() {
             showLoading(true);
-            document.getElementById('refresh-icon').classList.add('spin');
+            const refreshIcon = document.getElementById('refresh-icon');
+            if(refreshIcon) refreshIcon.classList.add('spin');
             
-            // 현재 방의 모든 투표 데이터(날짜 YYYY-MM-DD 형식) 가져오기
             const { data: votes, error } = await supabaseClient.from('dates').select('user_name, available_date').eq('room_code', state.roomCode).order('id', { ascending: true });
             
-            document.getElementById('refresh-icon').classList.remove('spin');
+            if(refreshIcon) refreshIcon.classList.remove('spin');
             showLoading(false);
             if(error) return showToast("데이터를 불러오는데 실패했습니다.");
 
-            // 데이터를 이전에 만든 구조 { "2026-05-10": ["홍길동", "김철수"] } 형태로 파싱
             state.roomData = {};
             state.orderedUsers = [];
 
@@ -273,7 +325,7 @@
 
             if (fpInstance) fpInstance.destroy(); 
             fpInstance = flatpickr("#calendar", {
-                inline: true, mode: "multiple", locale: "ko", dateFormat: "Y-m-d", // YYYY-MM-DD 형식 준수
+                inline: true, mode: "multiple", locale: "ko", dateFormat: "Y-m-d", 
                 defaultDate: myPrevDates,
                 onDayCreate: function(dObj, dStr, fp, dayElem) {
                     const dateStr = flatpickr.formatDate(dayElem.dateObj, "Y-m-d");
@@ -293,17 +345,14 @@
             });
         }
 
-        // --- 일정 투표 제출 ---
         async function submitDates() {
             const selectedDates = fpInstance.selectedDates.map(date => flatpickr.formatDate(date, "Y-m-d"));
             const myName = state.user.user_metadata.display_name;
             
             showLoading(true);
 
-            // 1. 기존에 내가 이 방에 투표했던 내역 깔끔하게 전체 삭제
             await supabaseClient.from('dates').delete().eq('room_code', state.roomCode).eq('user_id', state.user.id);
 
-            // 2. 새롭게 선택한 날짜들이 있다면 모두 Insert
             if (selectedDates.length > 0) {
                 const insertData = selectedDates.map(dateStr => ({
                     room_code: state.roomCode,
@@ -319,8 +368,8 @@
             }
 
             showLoading(false);
-            showToast("일정이 성공적으로 저장되었습니다!");
-            loadCalendarData(); // 방금 투표한 내역 포함하여 화면 갱신
+            showToast("일정이 저장되었습니다!");
+            loadCalendarData(); 
         }
     </script>
 </body>
