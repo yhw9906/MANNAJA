@@ -1,3 +1,26 @@
+// 페이지 로드 시 실행되는 자동 로그인 체크 로직
+window.onload = async () => {
+    showLoading(true);
+    
+    // 1. 브라우저에 저장된 기존 로그인 세션이 있는지 확인
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    
+    if (session && !error) {
+        // 세션이 있다면 사용자 정보를 상태에 저장하고 즉시 대시보드로 이동
+        state.user = session.user;
+        showToast(`${state.user.user_metadata.display_name}님, 다시 오신 것을 환영합니다!`);
+        await loadMyRooms();
+        switchScreen('screen-dashboard');
+    } else {
+        // 세션이 없다면 로그인 화면 유지
+        switchScreen('screen-auth');
+    }
+    
+    showLoading(false);
+};
+
+
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
