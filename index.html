@@ -24,22 +24,28 @@
 
     <div id="toast" class="fixed top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-xl transition-all duration-300 opacity-0 -translate-y-5 pointer-events-none z-[100] text-sm font-medium whitespace-nowrap"></div>
 
+    <!-- 회원정보 수정 모달 (색상 선택기 추가) -->
     <div id="modal-profile" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[90] p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
             <h2 class="font-bold text-lg mb-4">내 정보 수정</h2>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-xs text-gray-400 mb-1">이메일 (변경 불가)</label>
+                    <label class="block text-xs text-gray-400 mb-1">이메일</label>
                     <input type="text" id="editEmail" disabled class="w-full p-3 bg-gray-100 border border-gray-200 rounded-lg text-gray-500 outline-none cursor-not-allowed">
                 </div>
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">이름</label>
                     <input type="text" id="editName" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none font-bold focus:ring-2 focus:ring-indigo-500">
                 </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-2">고유 색상 선택</label>
+                    <!-- 10가지 색상 팔레트가 이 위치에 렌더링 됩니다 -->
+                    <div id="colorPickerContainer" class="flex flex-wrap gap-3"></div>
+                </div>
             </div>
             <div class="flex gap-2 mt-6">
-                <button onclick="closeProfileModal()" class="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold">취소</button>
-                <button onclick="handleUpdateProfile()" class="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold">저장하기</button>
+                <button onclick="closeProfileModal()" class="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-colors">취소</button>
+                <button onclick="handleUpdateProfile()" class="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition-colors">저장하기</button>
             </div>
         </div>
     </div>
@@ -51,17 +57,19 @@
 
         <h1 class="text-2xl font-extrabold text-indigo-600 text-center mb-8">SyncTime</h1>
 
+        <!-- 화면 1: 로그인 -->
         <div id="screen-auth" class="space-y-4">
             <h2 class="font-bold text-gray-700 text-lg border-b pb-2">로그인 / 회원가입</h2>
             <input type="email" id="authEmail" placeholder="이메일" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
             <input type="password" id="authPassword" placeholder="비밀번호" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none">
-            <input type="text" id="authName" placeholder="이름 (가입시에만)" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none font-bold">
+            <input type="text" id="authName" placeholder="표시될 이름 (가입시에만)" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg outline-none font-bold">
             <div class="flex gap-2 pt-2">
                 <button onclick="handleLogin()" class="flex-1 bg-gray-800 text-white font-bold py-3 rounded-lg">로그인</button>
                 <button onclick="handleSignUp()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-lg">가입하기</button>
             </div>
         </div>
 
+        <!-- 화면 2: 대시보드 -->
         <div id="screen-dashboard" class="hidden space-y-6">
             <div class="flex justify-between items-center border-b pb-2">
                 <div class="flex items-center gap-2">
@@ -94,6 +102,7 @@
             </div>
         </div>
 
+        <!-- 화면 3: 달력 -->
         <div id="screen-calendar" class="hidden space-y-5">
             <div class="flex justify-between items-start border-b pb-2">
                 <div>
@@ -120,8 +129,23 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_SNOSyYx-qg5RNgqkrUVRsQ_Ps9ShpTP';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        const state = { user: null, roomCode: null, roomName: null, roomData: {}, orderedUsers: [] };
+        // ★ 고정된 10가지 색상 팔레트
+        const FIXED_PALETTE = [
+            "#EF4444", // 빨강
+            "#F97316", // 주황
+            "#F59E0B", // 노랑
+            "#10B981", // 초록
+            "#14B8A6", // 청록
+            "#3B82F6", // 파랑
+            "#6366F1", // 남색
+            "#8B5CF6", // 보라
+            "#EC4899", // 분홍
+            "#64748B"  // 회색
+        ];
+
+        const state = { user: null, roomCode: null, roomName: null, roomData: {}, orderedUsers: [], userColors: {} };
         let fpInstance = null;
+        let currentEditColor = "";
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -135,12 +159,26 @@
             document.getElementById(screenId).classList.remove('hidden');
         }
 
-        // --- 회원정보 수정 로직 (새로 추가) ---
+        // --- 회원정보 수정 & 색상 선택 로직 ---
+        function renderColorPicker() {
+            const container = document.getElementById('colorPickerContainer');
+            container.innerHTML = FIXED_PALETTE.map(color => `
+                <button onclick="currentEditColor='${color}'; renderColorPicker();"
+                    class="w-8 h-8 rounded-full focus:outline-none transition-all duration-200 ${currentEditColor === color ? 'ring-4 ring-offset-2 ring-gray-400 scale-110 shadow-md' : 'hover:scale-110'}"
+                    style="background-color: ${color};">
+                </button>
+            `).join('');
+        }
+
         function openProfileModal() {
             document.getElementById('editEmail').value = state.user.email;
             document.getElementById('editName').value = state.user.user_metadata.display_name || "";
+            // 현재 유저의 색상을 불러오거나, 없으면 팔레트 첫 번째 색상으로 초기화
+            currentEditColor = state.user.user_metadata.color || FIXED_PALETTE[0]; 
+            renderColorPicker();
             document.getElementById('modal-profile').classList.remove('hidden');
         }
+
         function closeProfileModal() { document.getElementById('modal-profile').classList.add('hidden'); }
 
         async function handleUpdateProfile() {
@@ -149,41 +187,42 @@
             
             showLoading(true);
             
-            // 1. Supabase Auth의 유저 메타데이터 업데이트 (계정 정보 변경)
+            // 1. 이름과 선택된 '색상'을 함께 업데이트
             const { data, error: authError } = await supabaseClient.auth.updateUser({
-                data: { display_name: newName }
+                data: { display_name: newName, color: currentEditColor }
             });
 
-            if (authError) {
-                showLoading(false);
-                return showToast("이름 변경 실패: " + authError.message);
-            }
+            if (authError) { showLoading(false); return showToast("변경 실패: " + authError.message); }
 
-            // 2. 투표 테이블(dates)에 저장된 내 이름들도 전부 일괄 업데이트 (과거 투표 데이터 동기화)
+            // 2. 과거 투표 데이터 동기화 (user_name과 user_color 모두 변경)
             const { error: dbError } = await supabaseClient
                 .from('dates')
-                .update({ user_name: newName })
+                .update({ user_name: newName, user_color: currentEditColor })
                 .eq('user_id', state.user.id);
 
             showLoading(false);
-            
             if (dbError) return showToast("데이터 동기화 중 오류가 발생했습니다.");
 
-            state.user = data.user; // 변경된 유저 정보로 상태 갱신
+            state.user = data.user; 
             closeProfileModal();
-            showToast("이름이 성공적으로 변경되었습니다.");
-            await loadMyRooms(); // 대시보드 리스트 갱신
+            showToast("정보가 성공적으로 변경되었습니다.");
+            await loadMyRooms(); 
         }
 
-        // --- 기존 로직 (로그인, 방 생성, 달력 등) ---
+        // --- 인증 로직 ---
         async function handleSignUp() {
             const email = document.getElementById('authEmail').value.trim();
             const password = document.getElementById('authPassword').value;
             const name = document.getElementById('authName').value.trim();
             if(!email || !password || !name) return showToast("정보를 모두 입력하세요.");
+            
             showLoading(true);
+            
+            // ★ 가입 시 10가지 색상 중 하나를 랜덤으로 자동 배정
+            const randomColor = FIXED_PALETTE[Math.floor(Math.random() * FIXED_PALETTE.length)];
+            
             const { data, error } = await supabaseClient.auth.signUp({
-                email, password, options: { data: { display_name: name } }
+                email, password, options: { data: { display_name: name, color: randomColor } }
             });
             showLoading(false);
             if(error) return showToast(error.message);
@@ -254,33 +293,45 @@
             showLoading(false); document.getElementById('joinRoomCode').value = ''; enterRoom(code, data.room_name);
         }
 
+        // --- 일정 데이터 불러오기 및 렌더링 ---
         async function loadCalendarData() {
             showLoading(true);
-            const { data: votes, error } = await supabaseClient.from('dates').select('user_name, available_date').eq('room_code', state.roomCode).order('id', { ascending: true });
+            // user_color 컬럼도 같이 불러오기
+            const { data: votes, error } = await supabaseClient.from('dates').select('user_name, user_color, available_date').eq('room_code', state.roomCode).order('id', { ascending: true });
             showLoading(false);
-            state.roomData = {}; state.orderedUsers = [];
+            
+            state.roomData = {}; state.orderedUsers = []; state.userColors = {};
+            
             votes.forEach(vote => {
                 if(!state.roomData[vote.available_date]) state.roomData[vote.available_date] = [];
                 state.roomData[vote.available_date].push(vote.user_name);
+                
                 if(!state.orderedUsers.includes(vote.user_name)) state.orderedUsers.push(vote.user_name);
+                
+                // 각 유저별 저장된 색상 맵핑
+                state.userColors[vote.user_name] = vote.user_color;
             });
             renderCalendar(); switchScreen('screen-calendar');
         }
 
-        function getUserColor(name) {
-            let index = state.orderedUsers.indexOf(name);
-            if (index === -1) { index = state.orderedUsers.length; state.orderedUsers.push(name); }
-            const hue = (index * 150) % 360; return `hsl(${hue}, 80%, 50%)`;
-        }
-
         function renderCalendar() {
             const myName = state.user.user_metadata.display_name;
-            const usersSet = new Set(state.orderedUsers); usersSet.add(myName);
+            const myColor = state.user.user_metadata.color || FIXED_PALETTE[0];
+            
+            const usersSet = new Set(state.orderedUsers); 
+            usersSet.add(myName);
+            
+            // 만약 내가 아직 투표를 안 해서 색상 데이터가 안 불려왔을 경우를 대비해 명시적으로 삽입
+            state.userColors[myName] = myColor;
+
+            // 범례 영역 렌더링
             document.getElementById('legend-container').innerHTML = Array.from(usersSet).map(user => 
                 `<span class="flex items-center gap-1 bg-gray-50 border px-2 py-0.5 rounded-full font-semibold">
-                    <span class="user-dot" style="background-color: ${getUserColor(user)}"></span>${user}
+                    <span class="user-dot" style="background-color: ${state.userColors[user] || '#cbd5e1'}"></span>${user}
                 </span>`).join('');
+                
             const myPrevDates = Object.keys(state.roomData).filter(date => state.roomData[date].includes(myName));
+            
             if (fpInstance) fpInstance.destroy();
             fpInstance = flatpickr("#calendar", {
                 inline: true, mode: "multiple", locale: "ko", dateFormat: "Y-m-d", defaultDate: myPrevDates,
@@ -291,7 +342,8 @@
                         const dotsDiv = document.createElement("div"); dotsDiv.className = "dots-container";
                         users.forEach(user => {
                             const dot = document.createElement("span"); dot.className = "user-dot";
-                            dot.style.backgroundColor = getUserColor(user); dotsDiv.appendChild(dot);
+                            dot.style.backgroundColor = state.userColors[user] || '#cbd5e1'; 
+                            dotsDiv.appendChild(dot);
                         });
                         dayElem.appendChild(dotsDiv);
                     }
@@ -302,10 +354,20 @@
         async function submitDates() {
             const selectedDates = fpInstance.selectedDates.map(date => flatpickr.formatDate(date, "Y-m-d"));
             const myName = state.user.user_metadata.display_name;
+            const myColor = state.user.user_metadata.color || FIXED_PALETTE[0]; // 저장할 내 색상
+            
             showLoading(true);
             await supabaseClient.from('dates').delete().eq('room_code', state.roomCode).eq('user_id', state.user.id);
+            
             if (selectedDates.length > 0) {
-                const insertData = selectedDates.map(d => ({ room_code: state.roomCode, user_id: state.user.id, user_name: myName, available_date: d }));
+                // user_color 컬럼까지 포함하여 저장
+                const insertData = selectedDates.map(d => ({ 
+                    room_code: state.roomCode, 
+                    user_id: state.user.id, 
+                    user_name: myName, 
+                    user_color: myColor, 
+                    available_date: d 
+                }));
                 await supabaseClient.from('dates').insert(insertData);
             }
             showLoading(false); showToast("저장 완료!"); loadCalendarData();
