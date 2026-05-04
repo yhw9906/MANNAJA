@@ -163,17 +163,40 @@
             if(!name) return showToast("방 이름을 입력해주세요.");
             
             showLoading(true);
-            // 6자리 난수 코드 생성
+
+            // 1. 방 이름 중복 검사 (Supabase에서 같은 이름이 있는지 조회)
+            // maybeSingle()은 데이터가 없으면 null을 반환하여 에러를 내지 않습니다.
+            const { data: existingRoom, error: searchError } = await supabaseClient
+                .from('rooms')
+                .select('room_name')
+                .eq('room_name', name)
+                .maybeSingle();
+
+            if (searchError) {
+                showLoading(false);
+                return showToast("중복 검사 중 오류가 발생했습니다.");
+            }
+
+            // 2. 만약 같은 이름의 방이 발견되었다면 생성을 막고 알람 띄우기
+            if (existingRoom) {
+                showLoading(false);
+                return showToast("이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.");
+            }
+
+            // 3. 중복이 없다면 정상적으로 방 생성 진행
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const { error: insertError } = await supabaseClient
+                .from('rooms')
+                .insert([{ room_code: code, room_name: name }]);
             
-            const { error } = await supabaseClient.from('rooms').insert([{ room_code: code, room_name: name }]);
             showLoading(false);
 
-            if(error) {
-                if(error.code === '23505') return showToast("생성 오류: 코드가 중복되었습니다. 다시 시도해주세요.");
+            if(insertError) {
+                if(insertError.code === '23505') return showToast("생성 오류: 코드가 중복되었습니다. 다시 시도해주세요.");
                 return showToast("방 생성 중 오류가 발생했습니다.");
             }
 
+            // 4. 생성 완료 후 화면 전환
             state.roomCode = code;
             state.roomName = name;
             document.getElementById('roomTitleDisplay').innerText = name;
